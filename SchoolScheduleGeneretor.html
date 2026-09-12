@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1st Grade Schedule Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Emoji:wght@400&display=swap" rel="stylesheet">
+    
+    <style>
+        /* CSS Variables for Dynamic Fonts */
+        :root {
+            --font-heading: 'Assistant', sans-serif;
+            --font-body: 'Assistant', sans-serif;
+        }
+
+        body { background-color: #f3f4f6; }
+        .font-heading { 
+            font-family: var(--font-heading); 
+            font-weight: var(--weight-heading, 700) !important;
+            font-style: var(--style-heading, normal) !important;
+        }
+        .font-body { 
+            font-family: var(--font-body); 
+            font-weight: var(--weight-body, 400) !important;
+            font-style: var(--style-body, normal) !important;
+        }
+
+        /* Force Monochrome, Regular Weight Emoji */
+        .emoji-mono {
+            font-family: 'Noto Emoji', sans-serif !important;
+            font-weight: 400 !important; 
+            color: #4b5563; /* tailwind gray-600 */
+        }
+
+        /* Strict A4 Landscape Layout Setup */
+        .a4-landscape {
+            width: 1122px;
+            height: 793px;
+            background-color: white;
+            margin: 0 auto;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        /* Auto-scaling text variables for dynamic A4 fitting */
+        #schedule-export-container {
+            --text-scale: 1;
+        }
+        
+        .auto-text-title { font-size: calc(36px * var(--text-scale)); line-height: calc(40px * var(--text-scale)); }
+        .auto-text-break { font-size: calc(22px * var(--text-scale)); line-height: calc(26px * var(--text-scale)); }
+        .auto-text-thin-strip { font-size: calc(12px * var(--text-scale)); line-height: calc(14px * var(--text-scale)); }
+        .auto-text-day { font-size: calc(24px * var(--text-scale)); line-height: calc(26px * var(--text-scale)); }
+        .auto-text-subtitle { font-size: calc(13px * var(--text-scale)); line-height: calc(15px * var(--text-scale)); }
+        .auto-text-slot { font-size: calc(15px * var(--text-scale)); line-height: calc(17px * var(--text-scale)); }
+        .auto-text-slot-time { font-size: calc(13px * var(--text-scale)); line-height: calc(15px * var(--text-scale)); }
+        .auto-text-subj { font-size: calc(19px * var(--text-scale)); line-height: calc(20px * var(--text-scale)); }
+        .auto-text-teacher { font-size: calc(13px * var(--text-scale)); line-height: calc(15px * var(--text-scale)); }
+        .auto-text-mat { font-size: calc(13px * var(--text-scale)); line-height: calc(15px * var(--text-scale)); }
+        .auto-text-select { font-size: calc(11px * var(--text-scale)); padding: calc(2px * var(--text-scale)) calc(4px * var(--text-scale)); line-height: calc(14px * var(--text-scale)); margin-bottom: calc(4px * var(--text-scale)); }
+        .auto-text-time-header { font-size: calc(20px * var(--text-scale)); }
+        .auto-text-icon { font-size: calc(13px * var(--text-scale)); }
+
+        /* Proportional Spacing Scaling */
+        .scale-p-1-5 { padding: calc(6px * var(--text-scale)) !important; }
+        .scale-gap-1 { gap: calc(4px * var(--text-scale)) !important; }
+        .scale-gap-1-5 { gap: calc(6px * var(--text-scale)) !important; }
+        .scale-gap-2 { gap: calc(8px * var(--text-scale)) !important; }
+        .scale-mb-1-5 { margin-bottom: calc(6px * var(--text-scale)) !important; }
+        .scale-mb-2 { margin-bottom: calc(8px * var(--text-scale)) !important; }
+
+        /* Table Border Setup */
+        table { border-collapse: collapse; }
+        th, td { border: 1px solid #9ca3af !important; } /* 1px gray-400 */
+
+        .bg-stripes {
+            background-image: repeating-linear-gradient(45deg, #f9fafb 0px, #f9fafb 10px, #f3f4f6 10px, #f3f4f6 20px);
+        }
+
+        /* Hide scrollbar for cleanly styled preview */
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Native Print PDF Optimizations */
+        @media print {
+            @page { size: A4 landscape; margin: 0; }
+            body { 
+                margin: 0 !important; 
+                padding: 0 !important; 
+                background-color: white !important;
+                width: 100vw !important;
+                height: 100vh !important;
+            }
+            #ui-sidebar, #app-header { display: none !important; }
+            #preview-panel { 
+                width: 100vw !important; 
+                height: 100vh !important; 
+                padding: 0 !important; 
+                margin: 0 !important; 
+                overflow: hidden !important; 
+                background: white !important;
+            }
+            .a4-landscape { 
+                box-shadow: none !important; 
+                width: 100% !important; 
+                height: 100% !important; 
+                page-break-after: avoid; 
+                page-break-before: avoid; 
+            }
+            .print-exact { 
+                -webkit-print-color-adjust: exact !important; 
+                print-color-adjust: exact !important; 
+            }
+            .schedule-select {
+                display: none !important;
+            }
+            .cell-target[data-blank="true"] {
+                background-color: #f3f4f6 !important; /* Grey out blank cells on PDF */
+            }
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col text-gray-800 overflow-hidden">
+
+    <!-- Hidden state script container for self-contained HTML export -->
+    <script id="saved-state" type="application/json"></script>
+
+    <!-- App Header -->
+    <header id="app-header" class="bg-white border-b border-gray-200 p-4 flex justify-between items-center shrink-0 shadow-sm z-20">
+        <h1 class="text-xl font-bold text-gray-800">1st Grade Schedule Generator</h1>
+        <div class="flex gap-3">
+            <button onclick="exportHTML()" class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded text-sm font-medium transition shadow-sm flex items-center gap-2">
+                <span>&#x1F4BE;</span> Export HTML
+            </button>
+            <button onclick="exportJSON()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium transition shadow-sm">Export JSON</button>
+            <label class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm font-medium cursor-pointer transition border border-gray-300 shadow-sm">
+                Import JSON
+                <input type="file" accept=".json" class="hidden" onchange="importJSON(event)">
+            </label>
+            <button onclick="exportPDF()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium transition shadow-sm flex items-center gap-2">
+                <span>&#x1F5A8;</span> Export PDF
+            </button>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Settings Sidebar (LTR) -->
+        <aside id="ui-sidebar" class="w-1/3 max-w-md bg-white border-r border-gray-200 flex flex-col h-full shadow-lg z-10 shrink-0">
+            <div class="p-5 border-b border-gray-100 bg-gray-50 flex-shrink-0">
+                <h2 class="text-sm font-bold text-gray-600 uppercase tracking-wider mb-4">General Settings</h2>
+                <div id="general-container"></div>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto hide-scrollbar p-5 space-y-8">
+                <!-- Time Slots Section -->
+                <section>
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-sm font-bold text-gray-600 uppercase tracking-wider">Time Slots</h2>
+                        <button onclick="addSlot()" class="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-1 rounded font-medium transition">+ Add Slot</button>
+                    </div>
+                    <div id="slots-container" class="space-y-3"></div>
+                </section>
+
+                <hr class="border-gray-100">
+
+                <!-- Subjects Section -->
+                <section>
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-sm font-bold text-gray-600 uppercase tracking-wider">Subjects</h2>
+                        <button onclick="addSubject()" class="text-xs bg-green-50 text-green-600 hover:bg-green-100 px-2 py-1 rounded font-medium transition">+ Add Subject</button>
+                    </div>
+                    <div id="subjects-container" class="space-y-4"></div>
+                </section>
+            </div>
+        </aside>
+
+        <!-- Preview Area (RTL Hebrew Schedule) -->
+        <main id="preview-panel" class="flex-1 overflow-auto bg-gray-300 flex justify-center items-start p-8">
+            <div id="schedule-export-container" class="a4-landscape p-6 flex flex-col shadow-xl shrink-0 font-body" dir="rtl">
+                <h1 id="schedule-title" class="text-center font-heading font-bold auto-text-title text-gray-800 scale-mb-2"></h1>
+                <div id="schedule-grid-container" class="flex-1 w-full h-full"></div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const HEBREW_DAYS = [
+            { num: 1, text: 'רִאשׁוֹן' },
+            { num: 2, text: 'שֵׁנִי' },
+            { num: 3, text: 'שְׁלִישִׁי' },
+            { num: 4, text: 'רְבִיעִי' },
+            { num: 5, text: 'חֲמִישִׁי' },
+            { num: 6, text: 'שִׁישִׁי' }
+        ];
+
+        const HEBREW_FONTS = [
+            { name: 'Afacad', label: 'Afacad' },
+            { name: 'Afacad Flux', label: 'Afacad Flux' },
+            { name: 'Alef', label: 'Alef' },
+            { name: 'Amatic SC', label: 'Amatic SC' },
+            { name: 'Amatica SC', label: 'Amatica SC' },
+            { name: 'Arimo', label: 'Arimo' },
+            { name: 'Assistant', label: 'Assistant' },
+            { name: 'Bellefair', label: 'Bellefair' },
+            { name: 'Cousine', label: 'Cousine' },
+            { name: 'David Libre', label: 'David Libre' },
+            { name: 'Frank Ruhl Libre', label: 'Frank Ruhl Libre' },
+            { name: 'Heebo', label: 'Heebo' },
+            { name: 'IBM Plex Sans Hebrew', label: 'IBM Plex Sans Hebrew' },
+            { name: 'Karantina', label: 'Karantina' },
+            { name: 'Kufam', label: 'Kufam' },
+            { name: 'Mada', label: 'Mada' },
+            { name: 'Miriam Libre', label: 'Miriam Libre' },
+            { name: 'Noto Rashi Hebrew', label: 'Noto Rashi Hebrew' },
+            { name: 'Noto Sans', label: 'Noto Sans' },
+            { name: 'Noto Sans Hebrew', label: 'Noto Sans Hebrew' },
+            { name: 'Noto Serif', label: 'Noto Serif' },
+            { name: 'Noto Serif Hebrew', label: 'Noto Serif Hebrew' },
+            { name: 'Noto Traditional Hebrew', label: 'Noto Traditional Hebrew' },
+            { name: 'Open Sans', label: 'Open Sans' },
+            { name: 'Playpen Sans', label: 'Playpen Sans' },
+            { name: 'Readex Pro', label: 'Readex Pro' },
+            { name: 'Roboto', label: 'Roboto' },
+            { name: 'Rubik', label: 'Rubik' },
+            { name: 'Rubik 80s Fade', label: 'Rubik 80s Fade' },
+            { name: 'Rubik Beastly', label: 'Rubik Beastly' },
+            { name: 'Rubik Bubbles', label: 'Rubik Bubbles' },
+            { name: 'Rubik Burned', label: 'Rubik Burned' },
+            { name: 'Rubik Dirt', label: 'Rubik Dirt' },
+            { name: 'Rubik Distressed', label: 'Rubik Distressed' },
+            { name: 'Rubik Doodle Shadow', label: 'Rubik Doodle Shadow' },
+            { name: 'Rubik Doodle Triangles', label: 'Rubik Doodle Triangles' },
+            { name: 'Rubik Gemstones', label: 'Rubik Gemstones' },
+            { name: 'Rubik Glitch', label: 'Rubik Glitch' },
+            { name: 'Rubik Glitch Pop', label: 'Rubik Glitch Pop' },
+            { name: 'Rubik Iso', label: 'Rubik Iso' },
+            { name: 'Rubik Lines', label: 'Rubik Lines' },
+            { name: 'Rubik Maps', label: 'Rubik Maps' },
+            { name: 'Rubik Marker Hatch', label: 'Rubik Marker Hatch' },
+            { name: 'Rubik Maze', label: 'Rubik Maze' },
+            { name: 'Rubik Microbe', label: 'Rubik Microbe' },
+            { name: 'Rubik Moonrocks', label: 'Rubik Moonrocks' },
+            { name: 'Rubik Pixels', label: 'Rubik Pixels' },
+            { name: 'Rubik Puddles', label: 'Rubik Puddles' },
+            { name: 'Rubik Spray Paint', label: 'Rubik Spray Paint' },
+            { name: 'Rubik Storm', label: 'Rubik Storm' },
+            { name: 'Rubik Vinyl', label: 'Rubik Vinyl' },
+            { name: 'Rubik Water Hatch', label: 'Rubik Water Hatch' },
+            { name: 'Rubik Wet Paint', label: 'Rubik Wet Paint' },
+            { name: 'Secular One', label: 'Secular One' },
+            { name: 'Suez One', label: 'Suez One' },
+            { name: 'Tinos', label: 'Tinos' },
+            { name: 'Varela Round', label: 'Varela Round' },
+            { name: 'Vazirmatn', label: 'Vazirmatn' }
+        ];
+
+        let state = {
+            title: 'מַעֲרֶכֶת שָׁעוֹת',
+            headingFont: 'Assistant',
+            bodyFont: 'Assistant',
+            pageSizeX: 29.7,
+            pageSizeY: 21.0,
+            breakStyle: 'full',
+            colors: {
+                headersBg: '#f3f4f6',
+                timeBg: '#f3f4f6',
+                border: '#9ca3af',
+                breakBg: '#f9fafb',
+                emptySlotBg: '#f3f4f6',
+                defaultSlotBg: '#ffffff'
+            },
+            slots: [
+                { id: 's1', type: 'class', label: 'שיעור 1', start: '8:00', end: '8:45' },
+                { id: 's2', type: 'class', label: 'שיעור 2', start: '8:45', end: '9:35' },
+                { id: 's3', type: 'break', label: 'הפסקה', start: '9:35', end: '10:10' },
+                { id: 's4', type: 'class', label: 'שיעור 3', start: '10:10', end: '10:55' },
+                { id: 's5', type: 'class', label: 'שיעור 4', start: '10:55', end: '11:40' },
+                { id: 's6', type: 'break', label: 'הפסקה', start: '12:00', end: '12:45' }
+            ],
+            subjects: [
+                { id: 'sub1', name: 'שפה', emoji: '📖', teacher: 'מורה א׳', room: 'כיתה א׳', pack: 'מחברת חכמה, קלמר', drawer: 'מספריים', wear: 'חולצת בית ספר' },
+                { id: 'sub2', name: 'חשבון', emoji: '🔢', teacher: '', room: '', pack: 'חוברת שבילים, מחברת חשבון', drawer: 'בדידים', wear: '' },
+                { id: 'sub3', name: 'מדעים', emoji: '🔬', teacher: '', room: '', pack: '', drawer: '', wear: '', bgColor: '', titleColor: '' },
+                { id: 'sub4', name: 'ספורט', emoji: '⚽', teacher: '', room: 'אולם ספורט', pack: 'בקבוק מים', drawer: '', wear: 'חולצת בית ספר, נעלי ספורט', bgColor: '', titleColor: '' }
+            ],
+            schedule: {}
+        };
+
+        // Initialize Google Fonts dynamically
+        function loadGoogleFonts() {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            const families = HEBREW_FONTS.map(f => f.name.replace(/ /g, '+')).join('&family=');
+            link.href = `https://fonts.googleapis.com/css2?family=${families}&display=swap`;
+            document.head.appendChild(link);
+        }
+        
+        loadGoogleFonts();
+
+        // Listen for resize to ensure text scales dynamically if screen adjustments happen
+        window.addEventListener('resize', autoFitContent);
+
+        // Helper functions for safe string handling and formatting
+        function escapeHtml(str) {
+            if (typeof str !== 'string') return str;
+            return str.replace(/&/g, '&amp;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;')
+                      .replace(/"/g, '&quot;')
+                      .replace(/'/g, '&#039;');
+        }
+
+        function formatText(val) {
+            if (typeof val !== 'string') return val;
+            // Convert standard quotes to Hebrew Gershayim / Geresh
+            return val.replace(/"/g, '״').replace(/'/g, '׳');
+        }
+
+        // Custom internal alert logic
+        function showMessage(msg) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
+            modal.innerHTML = `
+                <div class="bg-white p-6 rounded shadow-lg max-w-sm w-full text-center">
+                    <p class="mb-4">${msg}</p>
+                    <button class="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-600" onclick="this.parentElement.parentElement.remove()">OK</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function autoFitContent() {
+            const container = document.getElementById('schedule-export-container');
+            if (!container) return;
+            
+            // Reset text scale to full size before measuring
+            container.style.setProperty('--text-scale', '1');
+            
+            let textScale = 1.0;
+            let attempts = 0;
+            
+            // Accurately check if content overflows the physically locked cell heights
+            const isOverflowing = () => {
+                if (container.scrollHeight > container.clientHeight + 1) return true; // Container overall bounds dynamically checked
+                
+                const wrappers = container.querySelectorAll('.cell-content-wrapper');
+                for (let i = 0; i < wrappers.length; i++) {
+                    // If inner flex elements demand more height than the TD grants them
+                    if (wrappers[i].scrollHeight > wrappers[i].clientHeight + 1) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            
+            // If the inner content pushes beyond bounds, proportionally shrink typography and spacing
+            while (isOverflowing() && textScale > 0.4 && attempts < 60) {
+                textScale -= 0.02;
+                container.style.setProperty('--text-scale', textScale.toString());
+                attempts++;
+            }
+        }
+
+        // Apply selected fonts to CSS vars
+        function applyFonts() {
+            document.documentElement.style.setProperty('--font-heading', `"${state.headingFont}", sans-serif`);
+            document.documentElement.style.setProperty('--font-body', `"${state.bodyFont}", sans-serif`);
+            document.documentElement.style.setProperty('--weight-heading', state.headingWeight || '700');
+            document.documentElement.style.setProperty('--weight-body', state.bodyWeight || '400');
+            document.documentElement.style.setProperty('--style-heading', state.headingStyle || 'normal');
+            document.documentElement.style.setProperty('--style-body', state.bodyStyle || 'normal');
+        }
+
+        function updateDynamicStyles() {
+            let styleTag = document.getElementById('dynamic-styles');
+            if (!styleTag) {
+                styleTag = document.createElement('style');
+                styleTag.id = 'dynamic-styles';
+                document.head.appendChild(styleTag);
+            }
+            styleTag.innerHTML = `
+                .a4-landscape {
+                    width: ${state.pageSizeX}cm !important;
+                    height: ${state.pageSizeY}cm !important;
+                }
+                @media print {
+                    @page { size: ${state.pageSizeX}cm ${state.pageSizeY}cm; margin: 0; }
+                }
+                th, td { border: ${state.borderWidth}px solid ${state.colors.border} !important; }
+                .cell-target[data-blank="true"] { background-color: ${state.colors.emptySlotBg} !important; }
+            `;
+        }
+
+        function renderApp() {
+            // Apply defaults to handle backwards compatibility for older exported JSON states
+            if (!state.colors) state.colors = { headersBg: '#f3f4f6', timeBg: '#f3f4f6', border: '#9ca3af', breakBg: '#f9fafb', emptySlotBg: '#f3f4f6', defaultSlotBg: '#ffffff' };
+            if (!state.pageSizeX) state.pageSizeX = 29.7;
+            if (!state.pageSizeY) state.pageSizeY = 21;
+            if (!state.breakStyle) state.breakStyle = 'full';
+            if (state.borderWidth === undefined) state.borderWidth = 1;
+            if (!state.headingWeight) state.headingWeight = '700';
+            if (!state.bodyWeight) state.bodyWeight = '400';
+            if (!state.headingStyle) state.headingStyle = 'normal';
+            if (!state.bodyStyle) state.bodyStyle = 'normal';
+            
+            applyFonts();
+            updateDynamicStyles();
+            renderSettings();
+            renderSchedule();
+            setTimeout(autoFitContent, 50); // allow layout to complete before fitting
+        }
+
+        function updateGeneral(key, value) {
+            state[key] = typeof value === 'string' ? formatText(value) : value;
+            renderApp();
+        }
+
+        function updateColor(key, value) {
+            state.colors[key] = value;
+            renderApp();
+        }
+
+        // --- SLOTS MANAGEMENT ---
+        function updateSlot(id, key, value) {
+            const slot = state.slots.find(s => s.id === id);
+            if (slot) {
+                slot[key] = formatText(value);
+                renderApp();
+            }
+        }
+
+        function removeSlot(id) {
+            state.slots = state.slots.filter(s => s.id !== id);
+            // Clean up schedule mapping
+            for (let key in state.schedule) {
+                if (key.endsWith(`_${id}`)) delete state.schedule[key];
+            }
+            renderApp();
+        }
+
+        function addSlot() {
+            const id = 's' + Date.now();
+            state.slots.push({ id, type: 'class', label: `שיעור ${state.slots.length + 1}`, start: '', end: '' });
+            renderApp();
+        }
+
+        function moveSlot(index, direction) {
+            if (index + direction < 0 || index + direction >= state.slots.length) return;
+            const temp = state.slots[index];
+            state.slots[index] = state.slots[index + direction];
+            state.slots[index + direction] = temp;
+            renderApp();
+        }
+
+        // --- SUBJECTS MANAGEMENT ---
+        function updateSubject(id, key, value) {
+            const subj = state.subjects.find(s => s.id === id);
+            if (subj) {
+                subj[key] = formatText(value);
+                renderApp();
+            }
+        }
+
+        function removeSubject(id) {
+            state.subjects = state.subjects.filter(s => s.id !== id);
+            // Revert mapped cells to blank
+            for (let key in state.schedule) {
+                if (state.schedule[key] === id) {
+                    state.schedule[key] = 'blank';
+                }
+            }
+            renderApp();
+        }
+
+        function addSubject() {
+            const id = 'sub' + Date.now();
+            state.subjects.push({ id, name: 'מקצוע חדש', emoji: '', teacher: '', room: '', pack: '', drawer: '', wear: '' });
+            renderApp();
+        }
+
+        function assignSubject(dayNum, slotId, subjectId) {
+            state.schedule[`day${dayNum}_${slotId}`] = subjectId;
+            renderApp();
+        }
+
+        function renderSettings() {
+            // Render General
+            const generalContainer = document.getElementById('general-container');
+            if(generalContainer) {
+                const fontOptions = HEBREW_FONTS.map(f => `<option value="${f.name}" ${state.headingFont === f.name ? 'selected' : ''}>${f.label}</option>`).join('');
+                const bodyFontOptions = HEBREW_FONTS.map(f => `<option value="${f.name}" ${state.bodyFont === f.name ? 'selected' : ''}>${f.label}</option>`).join('');
+
+                generalContainer.innerHTML = `
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-xs text-gray-500 block mb-1">Schedule Title (Optional)</label>
+                            <input type="text" value="${escapeHtml(state.title !== undefined ? state.title : '')}" onchange="updateGeneral('title', this.value)" class="w-full text-sm p-1.5 border rounded text-right font-bold outline-blue-500" dir="rtl" placeholder="Title">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 mb-1">
+                            <div class="space-y-1.5">
+                                <label class="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Headings</label>
+                                <select onchange="updateGeneral('headingFont', this.value)" class="w-full text-xs p-1.5 border rounded bg-white outline-blue-500 mb-1">
+                                    ${fontOptions}
+                                </select>
+                                <div class="flex gap-1">
+                                    <select onchange="updateGeneral('headingWeight', this.value)" class="flex-1 text-[11px] p-1 border rounded bg-white outline-blue-500">
+                                        <option value="300" ${state.headingWeight === '300' ? 'selected' : ''}>Light</option>
+                                        <option value="400" ${state.headingWeight === '400' ? 'selected' : ''}>Regular</option>
+                                        <option value="500" ${state.headingWeight === '500' ? 'selected' : ''}>Medium</option>
+                                        <option value="700" ${!state.headingWeight || state.headingWeight === '700' ? 'selected' : ''}>Bold</option>
+                                        <option value="900" ${state.headingWeight === '900' ? 'selected' : ''}>Black</option>
+                                    </select>
+                                    <select onchange="updateGeneral('headingStyle', this.value)" class="w-20 text-[11px] p-1 border rounded bg-white outline-blue-500">
+                                        <option value="normal" ${!state.headingStyle || state.headingStyle === 'normal' ? 'selected' : ''}>Normal</option>
+                                        <option value="italic" ${state.headingStyle === 'italic' ? 'selected' : ''}>Italic</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Body</label>
+                                <select onchange="updateGeneral('bodyFont', this.value)" class="w-full text-xs p-1.5 border rounded bg-white outline-blue-500 mb-1">
+                                    ${bodyFontOptions}
+                                </select>
+                                <div class="flex gap-1">
+                                    <select onchange="updateGeneral('bodyWeight', this.value)" class="flex-1 text-[11px] p-1 border rounded bg-white outline-blue-500">
+                                        <option value="300" ${state.bodyWeight === '300' ? 'selected' : ''}>Light</option>
+                                        <option value="400" ${!state.bodyWeight || state.bodyWeight === '400' ? 'selected' : ''}>Regular</option>
+                                        <option value="500" ${state.bodyWeight === '500' ? 'selected' : ''}>Medium</option>
+                                        <option value="700" ${state.bodyWeight === '700' ? 'selected' : ''}>Bold</option>
+                                        <option value="900" ${state.bodyWeight === '900' ? 'selected' : ''}>Black</option>
+                                    </select>
+                                    <select onchange="updateGeneral('bodyStyle', this.value)" class="w-20 text-[11px] p-1 border rounded bg-white outline-blue-500">
+                                        <option value="normal" ${!state.bodyStyle || state.bodyStyle === 'normal' ? 'selected' : ''}>Normal</option>
+                                        <option value="italic" ${state.bodyStyle === 'italic' ? 'selected' : ''}>Italic</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-gray-100">
+                            <div>
+                                <label class="text-xs text-gray-500 block mb-1">Page Width (CM)</label>
+                                <input type="number" step="0.1" value="${state.pageSizeX}" onchange="updateGeneral('pageSizeX', parseFloat(this.value))" class="w-full text-xs p-1.5 border rounded outline-blue-500">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-500 flex justify-between items-center mb-1">
+                                    <span>Page Height (CM)</span>
+                                    <button onclick="updateGeneral('pageSizeX', 29.7); updateGeneral('pageSizeY', 21.0);" class="text-[9px] bg-gray-200 hover:bg-gray-300 text-gray-700 px-1.5 py-0.5 rounded transition shadow-sm">Reset A4</button>
+                                </label>
+                                <input type="number" step="0.1" value="${state.pageSizeY}" onchange="updateGeneral('pageSizeY', parseFloat(this.value))" class="w-full text-xs p-1.5 border rounded outline-blue-500">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500 block mb-1">Recess (הפסקה) Display</label>
+                            <select onchange="updateGeneral('breakStyle', this.value)" class="w-full text-xs p-1.5 border rounded bg-white outline-blue-500">
+                                <option value="full" ${state.breakStyle === 'full' ? 'selected' : ''}>Week-wide (Default)</option>
+                                <option value="per-day" ${state.breakStyle === 'per-day' ? 'selected' : ''}>Per Day (Individual Cells)</option>
+                                <option value="thin-strip" ${state.breakStyle === 'thin-strip' ? 'selected' : ''}>Thin Strip (No Times)</option>
+                            </select>
+                        </div>
+                        <div class="pt-2 border-t border-gray-100">
+                            <label class="text-xs font-bold text-gray-600 block mb-2">Global Colors & Borders</label>
+                            <div class="flex items-center gap-2 mb-3 bg-white p-1.5 border rounded w-max">
+                                <label class="text-[10px] text-gray-600 font-bold">Border Width (px):</label>
+                                <input type="number" min="0" max="5" value="${state.borderWidth}" onchange="updateGeneral('borderWidth', parseInt(this.value))" class="w-12 text-xs p-1 border rounded outline-blue-500 text-center">
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="color" value="${state.colors.headersBg}" onchange="updateColor('headersBg', this.value)" class="w-6 h-6 p-0 border-0 rounded"><span class="text-[10px] text-gray-600">Day Headers</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="color" value="${state.colors.timeBg}" onchange="updateColor('timeBg', this.value)" class="w-6 h-6 p-0 border-0 rounded"><span class="text-[10px] text-gray-600">Time Column</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="color" value="${state.colors.breakBg}" onchange="updateColor('breakBg', this.value)" class="w-6 h-6 p-0 border-0 rounded"><span class="text-[10px] text-gray-600">Recess Block</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="color" value="${state.colors.emptySlotBg}" onchange="updateColor('emptySlotBg', this.value)" class="w-6 h-6 p-0 border-0 rounded"><span class="text-[10px] text-gray-600">Empty Slots</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="color" value="${state.colors.defaultSlotBg}" onchange="updateColor('defaultSlotBg', this.value)" class="w-6 h-6 p-0 border-0 rounded"><span class="text-[10px] text-gray-600">Default Slots</span></label>
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="color" value="${state.colors.border}" onchange="updateColor('border', this.value)" class="w-6 h-6 p-0 border-0 rounded"><span class="text-[10px] text-gray-600">Grid Borders</span></label>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Render Slots
+            const slotsContainer = document.getElementById('slots-container');
+            if(slotsContainer) {
+                slotsContainer.innerHTML = state.slots.map((slot, index) => `
+                    <div class="bg-gray-50 p-2 rounded border border-gray-200 shadow-sm relative group">
+                        <div class="absolute right-2 top-2 flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onclick="moveSlot(${index}, -1)" class="text-gray-400 hover:text-gray-700 bg-white rounded p-0.5 border" title="Move Up">↑</button>
+                            <button onclick="moveSlot(${index}, 1)" class="text-gray-400 hover:text-gray-700 bg-white rounded p-0.5 border" title="Move Down">↓</button>
+                        </div>
+                        <div class="flex items-center gap-2 mb-2 pr-6">
+                            <select onchange="updateSlot('${slot.id}', 'type', this.value)" class="text-xs p-1 border rounded bg-white w-20 outline-blue-500">
+                                <option value="class" ${slot.type === 'class' ? 'selected' : ''}>Class</option>
+                                <option value="break" ${slot.type === 'break' ? 'selected' : ''}>Recess</option>
+                            </select>
+                            <input type="text" value="${escapeHtml(slot.label)}" onchange="updateSlot('${slot.id}', 'label', this.value)" class="flex-1 text-sm p-1 border rounded text-right outline-blue-500" dir="rtl" placeholder="Label">
+                            <button onclick="removeSlot('${slot.id}')" class="text-red-500 hover:text-red-700 p-1" title="Remove Slot">×</button>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="text" value="${escapeHtml(slot.start)}" onchange="updateSlot('${slot.id}', 'start', this.value)" class="w-1/2 text-xs p-1 border rounded text-center outline-blue-500" placeholder="Start Time">
+                            <span class="text-gray-400 text-xs">-</span>
+                            <input type="text" value="${escapeHtml(slot.end)}" onchange="updateSlot('${slot.id}', 'end', this.value)" class="w-1/2 text-xs p-1 border rounded text-center outline-blue-500" placeholder="End Time">
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // Render Subjects
+            const subjectsContainer = document.getElementById('subjects-container');
+            if(subjectsContainer) {
+                subjectsContainer.innerHTML = state.subjects.map((subj) => `
+                    <div class="bg-gray-50 p-2.5 rounded border border-gray-200 shadow-sm space-y-2 relative">
+                        <button onclick="removeSubject('${subj.id}')" class="absolute top-1 right-2 text-red-400 hover:text-red-600 font-bold p-1">×</button>
+                        
+                        <div class="flex gap-2 pr-6">
+                            <div class="flex-1">
+                                <label class="text-[10px] text-gray-500 block">Subject Name*</label>
+                                <input type="text" value="${escapeHtml(subj.name)}" onchange="updateSubject('${subj.id}', 'name', this.value)" class="w-full text-sm p-1 border rounded text-right outline-blue-500 font-bold" dir="rtl">
+                            </div>
+                            <div class="w-12">
+                                <label class="text-[10px] text-gray-500 block">Emoji</label>
+                                <input type="text" value="${escapeHtml(subj.emoji)}" onchange="updateSubject('${subj.id}', 'emoji', this.value)" class="w-full text-sm p-1 border rounded text-center outline-blue-500">
+                            </div>
+                        </div>
+
+                        <div class="flex gap-2">
+                            <div class="flex-1">
+                                <label class="text-[10px] text-gray-500 block">Teacher</label>
+                                <input type="text" value="${escapeHtml(subj.teacher)}" onchange="updateSubject('${subj.id}', 'teacher', this.value)" class="w-full text-xs p-1 border rounded text-right outline-blue-500" dir="rtl">
+                            </div>
+                            <div class="flex-1">
+                                <label class="text-[10px] text-gray-500 block">Classroom</label>
+                                <input type="text" value="${escapeHtml(subj.room)}" onchange="updateSubject('${subj.id}', 'room', this.value)" class="w-full text-xs p-1 border rounded text-right outline-blue-500" dir="rtl">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="text-[10px] text-gray-500 block">Materials to pack</label>
+                            <input type="text" value="${escapeHtml(subj.pack)}" onchange="updateSubject('${subj.id}', 'pack', this.value)" class="w-full text-xs p-1 border rounded text-right outline-blue-500" dir="rtl" placeholder="e.g. מחברת, קלמר">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-gray-500 block">Materials from drawer</label>
+                            <input type="text" value="${escapeHtml(subj.drawer)}" onchange="updateSubject('${subj.id}', 'drawer', this.value)" class="w-full text-xs p-1 border rounded text-right outline-blue-500" dir="rtl" placeholder="e.g. מספריים, דבק">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-gray-500 block">What to wear</label>
+                            <input type="text" value="${escapeHtml(subj.wear)}" onchange="updateSubject('${subj.id}', 'wear', this.value)" class="w-full text-xs p-1 border rounded text-right outline-blue-500" dir="rtl" placeholder="e.g. חולצת בית ספר">
+                        </div>
+                        <div class="flex gap-2 pt-2 border-t border-gray-100 mt-2">
+                            <label class="flex items-center gap-1 cursor-pointer flex-1"><input type="color" value="${subj.bgColor || '#ffffff'}" onchange="updateSubject('${subj.id}', 'bgColor', this.value)" class="w-5 h-5 p-0 border-0 rounded"><span class="text-[10px] text-gray-600">Bg Color</span></label>
+                            <label class="flex items-center gap-1 cursor-pointer flex-1"><input type="color" value="${subj.titleColor || '#000000'}" onchange="updateSubject('${subj.id}', 'titleColor', this.value)" class="w-5 h-5 p-0 border-0 rounded"><span class="text-[10px] text-gray-600">Text Color</span></label>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function renderSchedule() {
+            const titleEl = document.getElementById('schedule-title');
+            if(titleEl) {
+                titleEl.innerHTML = state.title ? escapeHtml(state.title) : '';
+                titleEl.style.display = state.title ? 'block' : 'none';
+            }
+
+            // Calculate exact end times for each day subheader
+            const endTimes = {};
+            HEBREW_DAYS.forEach(day => {
+                let lastClassTime = '';
+                for (let i = state.slots.length - 1; i >= 0; i--) {
+                    const slot = state.slots[i];
+                    if (slot.type === 'class') {
+                        const cellKey = `day${day.num}_${slot.id}`;
+                        if (state.schedule[cellKey] && state.schedule[cellKey] !== 'blank') {
+                            lastClassTime = slot.end;
+                            break;
+                        }
+                    }
+                }
+                endTimes[day.num] = lastClassTime;
+            });
+
+            // Helper for material lists formatting (monochrome Noto Emoji)
+            function renderMaterialList(icon, text) {
+                if (!text) return '';
+                const items = text.split(',').map(i => i.trim()).filter(Boolean);
+                if (items.length === 0) return '';
+                return items.map(item => `
+                    <div class="flex items-start scale-gap-1 w-full auto-text-mat font-body text-gray-800">
+                        <span class="emoji-mono shrink-0 auto-text-icon" style="padding-top: 2px;">${icon}</span>
+                        <span class="break-words text-right flex-1">${escapeHtml(item)}</span>
+                    </div>
+                `).join('');
+            }
+            
+            const gridContainer = document.getElementById('schedule-grid-container');
+            if (!gridContainer) return;
+
+            let html = `<table class="w-full h-full border-collapse table-fixed bg-white print-exact" id="schedule-table">`;
+            
+            // --- HEADER ROW ---
+            html += `<thead><tr class="h-16">`;
+            html += `<th class="w-[8%] p-1 text-center text-gray-800 auto-text-time-header font-bold font-heading print-exact shadow-sm" style="background-color: ${state.colors.headersBg}">שעה</th>`;
+            
+            HEBREW_DAYS.forEach((day) => {
+                html += `<th class="p-1.5 align-middle relative print-exact w-[15%]" style="background-color: ${state.colors.headersBg}">
+                    <div class="flex flex-col items-center justify-center h-full">
+                        <div class="auto-text-day font-bold text-gray-800 tracking-wide font-heading">${day.num}. ${day.text}</div>
+                        ${endTimes[day.num] 
+                            ? `<div class="auto-text-subtitle font-normal mt-0.5 text-gray-700 font-heading">מסיימים: ${endTimes[day.num]}</div>` 
+                            : `<div class="mt-0.5 h-[14px]"></div>`}
+                    </div>
+                </th>`;
+            });
+            html += `</tr></thead><tbody class="text-gray-800">`;
+
+            // Sort subjects alphabetically for the dropdown + append Blank at the end
+            const sortedSubjects = [...state.subjects].sort((a, b) => a.name.localeCompare(b.name, 'he'));
+
+            // --- BODY ROWS ---
+            // Breaks take up 0.6 (or 0.2) units of height, Classes take up 2 units of height
+            let totalRowUnits = state.slots.reduce((sum, slot) => {
+                const bStyle = state.breakStyle || 'full';
+                const unit = slot.type === 'break' ? (bStyle === 'thin-strip' ? 0.2 : 0.6) : 2;
+                return sum + unit;
+            }, 0);
+
+            state.slots.forEach(slot => {
+                const bStyle = state.breakStyle || 'full';
+                const rowUnit = slot.type === 'break' ? (bStyle === 'thin-strip' ? 0.2 : 0.6) : 2;
+                const heightPercent = (rowUnit / totalRowUnits) * 100;
+                
+                html += `<tr style="height: ${heightPercent}%;">`;
+                
+                // Rightmost Column (Time Label)
+                if (slot.type === 'break') {
+                    if (bStyle === 'thin-strip') {
+                        html += `<td class="p-1 text-center align-middle print-exact" style="background-color: ${state.colors.timeBg}"></td>`;
+                    } else {
+                        html += `<td class="p-1 text-center align-middle print-exact" style="background-color: ${state.colors.timeBg}">
+                            <div class="font-bold auto-text-slot text-gray-800 font-heading leading-tight">${escapeHtml(slot.label)}</div>
+                            <div dir="ltr" class="auto-text-slot-time text-gray-600 font-normal mt-0.5 inline-block text-center leading-tight font-body">
+                                ${escapeHtml(slot.start)} - ${escapeHtml(slot.end)}
+                            </div>
+                        </td>`;
+                    }
+                } else {
+                    html += `<td class="p-1 text-center align-middle print-exact" style="background-color: ${state.colors.timeBg}">
+                        <div class="font-bold auto-text-slot text-gray-800 font-heading leading-tight">${escapeHtml(slot.label)}</div>
+                        <div dir="ltr" class="auto-text-slot-time text-gray-600 font-normal mt-1 inline-block text-center leading-tight font-body">
+                            ${escapeHtml(slot.start)}<br/>${escapeHtml(slot.end)}
+                        </div>
+                    </td>`;
+                }
+
+                if (slot.type === 'break') {
+                    if (bStyle === 'thin-strip') {
+                        html += `<td colspan="6" style="background-color: ${state.colors.breakBg}" class="p-1 align-middle overflow-hidden print-exact">
+                            <div class="flex justify-around items-center w-full whitespace-nowrap opacity-40">
+                                <span class="auto-text-thin-strip font-bold text-gray-700 font-heading">${escapeHtml(slot.label)}</span>
+                                <span class="auto-text-thin-strip font-bold text-gray-700 font-heading">${escapeHtml(slot.label)}</span>
+                                <span class="auto-text-thin-strip font-bold text-gray-700 font-heading">${escapeHtml(slot.label)}</span>
+                                <span class="auto-text-thin-strip font-bold text-gray-700 font-heading">${escapeHtml(slot.label)}</span>
+                                <span class="auto-text-thin-strip font-bold text-gray-700 font-heading">${escapeHtml(slot.label)}</span>
+                                <span class="auto-text-thin-strip font-bold text-gray-700 font-heading">${escapeHtml(slot.label)}</span>
+                            </div>
+                        </td>`;
+                    } else if (bStyle === 'per-day') {
+                        HEBREW_DAYS.forEach(() => {
+                            html += `<td style="background-color: ${state.colors.breakBg}" class="p-1 text-center align-middle print-exact relative">
+                                <span class="auto-text-break font-bold text-gray-700 tracking-wider font-heading">${escapeHtml(slot.label)}</span>
+                            </td>`;
+                        });
+                    } else {
+                        // Full row spanning break
+                        html += `<td colspan="6" style="background-color: ${state.colors.breakBg}" class="p-1 text-center align-middle print-exact relative">
+                            <div class="inline-block bg-white/90 px-6 py-0.5 rounded-full border border-gray-300 shadow-sm relative z-10">
+                                <span class="auto-text-break font-bold text-gray-700 tracking-wider font-heading">${escapeHtml(slot.label)}</span>
+                            </div>
+                        </td>`;
+                    }
+                } else {
+                    // 6 Day Columns (Classes)
+                    HEBREW_DAYS.forEach(day => {
+                        const cellKey = `day${day.num}_${slot.id}`;
+                        const selectedSubjId = state.schedule[cellKey] || 'blank';
+                        const subj = state.subjects.find(s => s.id === selectedSubjId);
+                        
+                        const isBlank = selectedSubjId === 'blank';
+                        const cellBg = isBlank ? state.colors.emptySlotBg : (subj ? (subj.bgColor || state.colors.defaultSlotBg) : state.colors.defaultSlotBg);
+                        
+                        html += `<td style="background-color: ${cellBg}" class="scale-p-1-5 align-top relative print-exact cell-target overflow-hidden" data-blank="${isBlank}">`;
+                        html += `<div class="flex flex-col h-full overflow-hidden w-full cell-content-wrapper">`; 
+                        
+                        // Select Dropdown (Alphabetical with Blank at end)
+                        html += `<select class="schedule-select w-full auto-text-select font-semibold bg-white/50 border border-transparent hover:border-gray-300 text-gray-700 rounded outline-none shrink-0 cursor-pointer transition z-10 relative font-heading mb-1" onchange="assignSubject(${day.num}, '${slot.id}', this.value)">`;
+                        sortedSubjects.forEach(s => {
+                            html += `<option value="${s.id}" ${s.id === selectedSubjId ? 'selected' : ''}>${escapeHtml(s.name)}</option>`;
+                        });
+                        html += `<option value="blank" ${selectedSubjId === 'blank' ? 'selected' : ''}>ריק</option>`;
+                        html += `</select>`;
+
+                        // Display Subject Information exactly formatted
+                        if (subj && !isBlank) {
+                            const titleColor = subj.titleColor || '#000000';
+                            html += `<div class="flex flex-col flex-1 overflow-hidden p-0 w-full justify-start items-center">`;
+                            
+                            html += `<div style="color: ${titleColor}" class="font-bold auto-text-subj flex items-center justify-center scale-gap-1-5 scale-mb-1-5 shrink-0 w-full font-heading">
+                                        <span>${escapeHtml(subj.name)}</span>
+                                        ${subj.emoji ? `<span class="auto-text-subj emoji-mono text-gray-600">${escapeHtml(subj.emoji)}</span>` : ''}
+                                     </div>`;
+                            
+                            if (subj.teacher || subj.room) {
+                                html += `<div class="flex flex-col scale-gap-1 scale-mb-1-5 shrink-0 w-full items-start text-right">`;
+                                if (subj.teacher) html += `<div class="auto-text-teacher text-gray-800 w-full truncate flex items-center scale-gap-1 font-body"><span class="emoji-mono auto-text-icon">&#x1F464;</span> <span>${escapeHtml(subj.teacher)}</span></div>`;
+                                if (subj.room) html += `<div class="auto-text-teacher text-gray-800 w-full truncate flex items-center scale-gap-1 font-body"><span class="emoji-mono auto-text-icon">&#x1F6AA;</span> <span>${escapeHtml(subj.room)}</span></div>`;
+                                html += `</div>`;
+                            }
+                            
+                            if (subj.pack || subj.drawer || subj.wear) {
+                                html += `<div class="flex flex-col scale-gap-1 mt-0 border-t border-gray-300 border-dashed pt-1.5 shrink-0 w-full justify-start">`;
+                                html += renderMaterialList('&#x1F392;', subj.pack);
+                                html += renderMaterialList('&#x1F5C4;', subj.drawer);
+                                html += renderMaterialList('&#x1F45F;', subj.wear);
+                                html += `</div>`;
+                            }
+                            html += `</div>`;
+                        }
+                        
+                        html += `</div></td>`;
+                    });
+                }
+                html += `</tr>`;
+            });
+
+            html += `</tbody></table>`;
+            gridContainer.innerHTML = html;
+        }
+
+        function exportPDF() {
+            window.print();
+        }
+
+        function exportJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "schedule_backup.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
+
+        function importJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedState = JSON.parse(e.target.result);
+                    if (importedState && importedState.slots) {
+                        state = importedState;
+                        renderApp();
+                        showMessage("Schedule successfully loaded!");
+                    }
+                } catch (err) {
+                    showMessage('Invalid JSON file format.');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function exportHTML() {
+            // Update the hidden script block with the most current state so it travels with the file
+            let stateTag = document.getElementById('saved-state');
+            if (stateTag) {
+                stateTag.textContent = JSON.stringify(state);
+            }
+
+            const htmlContent = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'My_1st_Grade_Schedule.html';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        window.onload = () => {
+            // Check if this HTML file was generated via "Export HTML" and contains a saved state
+            const stateTag = document.getElementById('saved-state');
+            if (stateTag && stateTag.textContent) {
+                try {
+                    const savedState = JSON.parse(stateTag.textContent);
+                    if (savedState && savedState.slots) {
+                        state = savedState;
+                    }
+                } catch (e) {
+                    console.error("Could not load embedded state.", e);
+                }
+            }
+            renderApp();
+        };
+
+    </script>
+</body>
+</html>
